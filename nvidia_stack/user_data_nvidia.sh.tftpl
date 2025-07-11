@@ -1,0 +1,26 @@
+#!/bin/bash
+exec > /home/ubuntu/user_data.log 2>&1
+
+# Update and install system packages
+sudo apt-get update
+sudo apt-get install -y python3-pip git
+
+# Activate PyTorch environment
+source /opt/pytorch/bin/activate
+
+python3 -m pip install --upgrade pip
+python3 -m pip install torch torchvision transformers psutil numpy pandas boto3 requests
+
+
+# Write cost tracking script (create file early)
+cat <<'EOF' > /home/ubuntu/track_cost.py
+${track_cost_py}
+EOF
+
+chmod +x /home/ubuntu/track_cost.py
+
+# Run cost tracker in background using the PyTorch python
+nohup /opt/pytorch/bin/python3 /home/ubuntu/track_cost.py > /home/ubuntu/cost_log.txt 2>&1 &
+
+# (Optional) Run your Huggingface test script if you want on boot
+# /opt/pytorch/bin/python3 /home/ubuntu/test-huggingface_cpu.py
