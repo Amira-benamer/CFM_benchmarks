@@ -1,39 +1,4 @@
-"""Systematic Benchmarking Framework: AWS Neuron vs Nvidia GPU Comparison.
 
-This module provides comprehensive benchmarking infrastructure for direct 1:1
-performance and cost comparisons between AWS Trainium/Inferentia and Nvidia GPU
-platforms. Designed to support the sister Nvidia tutorial with standardized
-benchmarking protocols.
-
-Comparison Categories:
-    - Training Performance: Throughput, memory usage, compilation time
-    - Inference Performance: Latency, throughput, batch efficiency
-    - Cost Analysis: Training cost per epoch, inference cost per request
-    - Model Compatibility: Framework support, precision capabilities
-    - Developer Experience: Setup time, debugging tools, documentation
-
-TESTED VERSIONS (Last validated: 2025-06-24):
-    - AWS Neuron SDK: 2.20.1
-    - torch-neuronx: 2.2.0
-    - PyTorch: 2.4.0 with full Neuron support
-    - Benchmark Models: BERT, GPT-2, ResNet-50, Custom Transformer
-    - Instance Types: trn1.2xlarge, inf2.xlarge vs p4d.24xlarge, g5.xlarge
-    - Test Status: ✅ Comprehensive benchmarking protocols validated
-
-DESIGN PRINCIPLES:
-    - Standardized test harnesses for fair comparison
-    - Identical model architectures and datasets
-    - Statistical significance with multiple runs
-    - Cost analysis using real AWS pricing
-    - Reproducible environments and configurations
-
-Sister Tutorial Integration:
-    This framework generates data for the companion Nvidia tutorial,
-    ensuring direct comparability and avoiding vendor bias in benchmarking.
-
-Author: Scott Friedman
-Date: 2025-06-24
-"""
 
 import json
 import logging
@@ -395,7 +360,7 @@ class NeuronVsNvidiaBenchmarker:
     ) -> Optional[BenchmarkResult]:
         """Benchmark training performance."""
         logger.info(
-            f"🏃 Training benchmark: batch={batch_size}, seq_len={sequence_length}"
+            f" Training benchmark: batch={batch_size}, seq_len={sequence_length}"
         )
 
         try:
