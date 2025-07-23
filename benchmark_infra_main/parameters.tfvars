@@ -1,0 +1,23 @@
+instances = [
+  #   {
+  #     name           = "infrentia"
+  #     ami            = "ami-088e8deff9e0aafeb"
+  #     instance_type  = "g4dn.xlarge"
+  #     experiment_name = "ml_benchmark_1"
+  #   },
+  {
+    name            = "nvidia"
+    ami             = "ami-088e8deff9e0aafeb" 
+    instance_type   = "t3.2xlarge"
+    experiment_name = "nvidia"
+    key_name            = "key-test-cfm"
+  }
+]
+
+region              = "eu-west-1"
+availability_zone   = "eu-west-1a"
+key_name            = "key-test-cfm"
+vpc_cidr            = "10.0.0.0/16"
+vpc_name            = "ml-benchmark-vpc"
+public_subnet_cidr  = "10.0.1.0/24"
+private_subnet_cidr = "10.0.2.0/24"

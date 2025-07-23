@@ -1,0 +1,8 @@
+torch
+torchvision
+transformers
+psutil
+numpy
+pandas
+boto3
+requests
