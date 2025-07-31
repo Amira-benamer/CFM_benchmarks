@@ -6,6 +6,7 @@ resource "aws_vpc" "this" {
 
   tags = {
     Name = var.vpc_name
+    Project = "13939"
   }
 }
 
@@ -15,6 +16,7 @@ resource "aws_internet_gateway" "this" {
 
   tags = {
     Name = "${var.vpc_name}-igw"
+    Project = "13939"
   }
 }
 
@@ -27,6 +29,7 @@ resource "aws_subnet" "public" {
 
   tags = {
     Name = "${var.vpc_name}-public-subnet"
+    Project = "13939"
   }
 }
 
@@ -38,6 +41,7 @@ resource "aws_subnet" "private" {
 
   tags = {
     Name = "${var.vpc_name}-private-subnet"
+    Project = "13939"
   }
 }
 
@@ -51,6 +55,7 @@ resource "aws_nat_gateway" "this" {
 
   tags = {
     Name = "${var.vpc_name}-nat"
+    Project = "13939"
   }
 }
 
@@ -60,6 +65,7 @@ resource "aws_route_table" "public" {
 
   tags = {
     Name = "${var.vpc_name}-public-rt"
+    Project = "13939"
   }
 }
 
@@ -79,7 +85,8 @@ resource "aws_route_table" "private" {
   vpc_id = aws_vpc.this.id
 
   tags = {
-    Name = "${var.vpc_name}-private-rt"
+    Name = "${var.vpc_name}-private-rt",
+    Project = "13939"
   }
 }
 
@@ -116,5 +123,6 @@ resource "aws_security_group" "this" {
 
   tags = {
     Name = "${var.vpc_name}-sg"
+    Project = "13939"
   }
 }

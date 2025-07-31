@@ -75,7 +75,8 @@ class LLM_HuggingFace_Zephyr:
         return result
 
 if __name__ == '__main__':
-    model_name = "HuggingFaceH4/zephyr-7b-beta"
+    # model_name = "HuggingFaceH4/zephyr-7b-beta"
+    model_name = "stabilityai/stablelm-zephyr-3b"
     model_path = None
     prompts = [
         "What is the capital of France?",

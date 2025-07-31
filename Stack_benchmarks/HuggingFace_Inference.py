@@ -119,7 +119,8 @@ if __name__ == '__main__':
     use_zephyr = True  # Set to False for RoBERTa
 
     if use_zephyr:
-        model_name = "HuggingFaceH4/zephyr-7b-beta"
+        # model_name = "HuggingFaceH4/zephyr-7b-beta"
+        model_name = "stabilityai/stablelm-zephyr-3b"
         model_path = None
         prompts = [
             "What is the capital of France?",

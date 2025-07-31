@@ -7,15 +7,16 @@ instances = [
   #   },
   {
     name            = "nvidia"
-    ami             = "ami-088e8deff9e0aafeb" 
+    # ami             = "ami-088e8deff9e0aafeb" # Ireland
+    ami             = "ami-00f71ac70c2d6344d" # Ohio
     instance_type   = "t3.2xlarge"
     experiment_name = "nvidia"
-    key_name            = "key-test-cfm"
+    key_name        = "key-test-cfm"
   }
 ]
 
-region              = "eu-west-1"
-availability_zone   = "eu-west-1a"
+region              = "us-east-2"
+availability_zone   = "us-east-2a"
 key_name            = "key-test-cfm"
 vpc_cidr            = "10.0.0.0/16"
 vpc_name            = "ml-benchmark-vpc"

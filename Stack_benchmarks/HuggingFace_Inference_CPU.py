@@ -111,7 +111,7 @@ if __name__ == '__main__':
         ]
     else:
         model_name = "FacebookAI/roberta-base"
-        model_path = "/home/ubuntu/results/roberta-finetuned"
+        model_path = None
         prompts = [
             "I love using this product!",
             "Worst support ever received.",

@@ -1,6 +1,3 @@
-
-
-
 resource "aws_instance" "ml_benchmark" {
   subnet_id     = var.public_subnet_id
   ami           = var.ami
@@ -10,5 +7,6 @@ resource "aws_instance" "ml_benchmark" {
   tags = {
     Name     = var.experiment_name
     Platform = var.name
+    Project = "13939"
   }
 }

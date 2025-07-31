@@ -1,20 +1,17 @@
-
-
 import json
 import logging
-import os
 import statistics
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 import psutil
 import torch
-import torch.nn as nn
+from torch import nn
 
 # Neuron imports
 try:
@@ -103,7 +100,6 @@ class BenchmarkResult:
 class StandardModelSuite:
     """Collection of standardized models for fair comparison."""
 
-
     @staticmethod
     def get_roberta_base(sequence_length: int = 512) -> nn.Module:
         from transformers import RobertaConfig, RobertaModel
@@ -128,8 +124,6 @@ class StandardModelSuite:
         model_name = "HuggingFaceH4/zephyr-7b-beta"
         model = AutoModelForCausalLM.from_pretrained(model_name)
         return model
-
-
 
     @staticmethod
     def get_bert_base(sequence_length: int = 512, vocab_size: int = 30522) -> nn.Module:
@@ -582,9 +576,7 @@ class NeuronVsNvidiaBenchmarker:
                         memory_before = psutil.virtual_memory().used / (1024**3)
                     else:
                         torch.cuda.synchronize()
-                        memory_before = torch.cuda.memory_allocated(device) / (
-                            1024**3
-                        )
+                        memory_before = torch.cuda.memory_allocated(device) / (1024**3)
 
                     # Timing
                     start_time = time.time()
@@ -929,9 +921,11 @@ class NeuronVsNvidiaBenchmarker:
                 framework="pytorch",
                 task_type="training",
                 platform=self.current_platform,
-                instance_type="trn1.2xlarge"
-                if self.current_platform == "neuron"
-                else "p3.2xlarge",
+                instance_type=(
+                    "trn1.2xlarge"
+                    if self.current_platform == "neuron"
+                    else "p3.2xlarge"
+                ),
                 batch_sizes=[4, 8, 16],
                 sequence_lengths=[128, 512],
                 num_runs=3,
@@ -942,9 +936,9 @@ class NeuronVsNvidiaBenchmarker:
                 framework="pytorch",
                 task_type="inference",
                 platform=self.current_platform,
-                instance_type="inf2.xlarge"
-                if self.current_platform == "neuron"
-                else "g5.xlarge",
+                instance_type=(
+                    "inf2.xlarge" if self.current_platform == "neuron" else "g5.xlarge"
+                ),
                 batch_sizes=[1, 4, 8, 16, 32],
                 sequence_lengths=[128, 512],
                 num_runs=5,
@@ -955,9 +949,9 @@ class NeuronVsNvidiaBenchmarker:
                 framework="pytorch",
                 task_type="inference",
                 platform=self.current_platform,
-                instance_type="inf2.xlarge"
-                if self.current_platform == "neuron"
-                else "g5.xlarge",
+                instance_type=(
+                    "inf2.xlarge" if self.current_platform == "neuron" else "g5.xlarge"
+                ),
                 batch_sizes=[1, 4, 8, 16, 32, 64],
                 sequence_lengths=[224],  # Image size
                 num_runs=5,
@@ -1037,9 +1031,9 @@ def main():
         framework="pytorch",
         task_type="inference",
         platform=benchmarker.current_platform,
-        instance_type="inf2.xlarge"
-        if benchmarker.current_platform == "neuron"
-        else "g5.xlarge",
+        instance_type=(
+            "inf2.xlarge" if benchmarker.current_platform == "neuron" else "g5.xlarge"
+        ),
         batch_sizes=[1, 8],
         sequence_lengths=[128],
         num_runs=3,
