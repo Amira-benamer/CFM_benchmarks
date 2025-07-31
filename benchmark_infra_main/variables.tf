@@ -12,7 +12,6 @@ variable "instances" {
     ami             = string
     instance_type   = string
     experiment_name = string
-    key_name        = string
   }))
 
 }
