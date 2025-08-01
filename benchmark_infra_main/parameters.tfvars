@@ -9,7 +9,7 @@ instances = [
     name            = "nvidia"
     # ami             = "ami-088e8deff9e0aafeb" # Ireland
     ami             = "ami-00f71ac70c2d6344d" # Ohio
-    instance_type   = "t3.2xlarge"
+    instance_type   = "g5.xlarge"
     experiment_name = "nvidia"
     key_name        = "key-test-cfm"
   }
