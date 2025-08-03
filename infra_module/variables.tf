@@ -6,6 +6,11 @@ variable "ami" {
   type        = string
 }
 
+variable "user_data_file" {
+  description = "Path to the user data file for the EC2 instance"
+  type        = string
+}
+
 variable "instance_type" {
   description = "Instance type for the EC2 instance"
   type        = string

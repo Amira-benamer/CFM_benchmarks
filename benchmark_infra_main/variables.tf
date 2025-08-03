@@ -12,6 +12,7 @@ variable "instances" {
     ami             = string
     instance_type   = string
     experiment_name = string
+    user_data_file = string
     key_name        = string
   }))
 

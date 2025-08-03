@@ -17,7 +17,7 @@ resource "aws_instance" "ml_benchmark" {
     }
   }
   
-  user_data = templatefile("${path.module}/user_data.sh", {
+  user_data = templatefile("${path.module}/${var.user_data_file}", {
     experiment_name = var.experiment_name
     instance_type   = var.instance_type
   })

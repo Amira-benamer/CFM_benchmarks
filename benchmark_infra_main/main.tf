@@ -17,6 +17,7 @@ module "infra_benchmarks" {
   ami               = each.value.ami
   experiment_name   = each.value.experiment_name
   key_name          = each.value.key_name
+  user_data_file    = each.value.user_data_file
   vpc_id            = module.network.vpc_id
   public_subnet_id  = module.network.public_subnet_id
   private_subnet_id = module.network.private_subnet_id
