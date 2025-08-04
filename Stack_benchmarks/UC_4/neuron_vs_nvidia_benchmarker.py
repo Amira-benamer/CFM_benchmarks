@@ -103,6 +103,28 @@ class NeuronVsNvidiaBenchmarker:
         logger.error(f"Unknown model: {model_name}")
         return None
 
+    def _chunk_prompt(self, prompt, tokenizer, chunk_size=400):
+        tokens = tokenizer.encode(prompt, add_special_tokens=False)
+        return [tokens[i:i+chunk_size] for i in range(0, len(tokens), chunk_size)]
+
+    def _batch_prompts(self, prompts, tokenizer, batch_size, chunk_size=None):
+        batches = []
+        if chunk_size:
+            all_chunks = []
+            for prompt in prompts:
+                chunks = self._chunk_prompt(prompt, tokenizer, chunk_size)
+                all_chunks.extend(chunks)
+            for i in range(0, len(all_chunks), batch_size):
+                batch = all_chunks[i:i+batch_size]
+                batch = tokenizer.pad({'input_ids': batch}, return_tensors='pt')['input_ids']
+                batches.append(batch)
+        else:
+            encodings = tokenizer(prompts, padding=True, return_tensors='pt')
+            input_ids = encodings['input_ids']
+            for i in range(0, len(input_ids), batch_size):
+                batches.append(input_ids[i:i+batch_size])
+        return batches
+
     def _benchmark_inference(
         self,
         model: nn.Module,
@@ -116,114 +138,111 @@ class NeuronVsNvidiaBenchmarker:
         )
 
         try:
+            from transformers import AutoTokenizer
+            tokenizer = None
+            if config.prompts:
+                if config.model_name == "zephyr":
+                    model_name = "HuggingFaceH4/zephyr-7b-beta"
+                else:
+                    model_name = config.model_name
+                tokenizer = AutoTokenizer.from_pretrained(model_name)
+                # Prepare batches of prompts/chunks
+                batches = self._batch_prompts(config.prompts, tokenizer, batch_size, chunk_size=sequence_length)
             # Prepare model and data
             if config.platform == "neuron" and NEURON_AVAILABLE:
                 device = xm.xla_device()
                 model = model.to(device)
-
-                # Compile for Neuron (this would be compilation benchmark)
-                if hasattr(torch_neuronx, "trace"):
-                    # Generate sample input for tracing
-                    if (
-                    "roberta" in config.model_name
-                    or "zephyr" in config.model_name
-                    ):
-                    sample_input = torch.randint(
-                    0, 30000, (1, sequence_length), device=device
-                    )
-                    else:
-                    raise ValueError("Unsupported model for this benchmark suite.")
-
-                    model = torch_neuronx.trace(model, sample_input)
             else:
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 model = model.to(device)
-
             model.eval()
-
-            # Generate test data
-            if (
-                "roberta" in config.model_name
-                or "zephyr" in config.model_name
-            ):
-                input_data = torch.randint(
-                    0, 30000, (batch_size, sequence_length), device=device
-                )
-            else:
-                raise ValueError("Unsupported model for this benchmark suite.")
-
             # Warmup runs
             with torch.no_grad():
-                for _ in range(config.warmup_runs):
-                    _ = model(input_data)
-                    if config.platform == "neuron":
-                        xm.wait_device_ops()
-                    else:
-                        torch.cuda.synchronize()
-
+                if config.prompts and tokenizer:
+                    for _ in range(config.warmup_runs):
+                        for batch in batches:
+                            batch = batch.to(device)
+                            _ = model(input_ids=batch)
+                            if config.platform == "neuron":
+                                xm.wait_device_ops()
+                            else:
+                                torch.cuda.synchronize()
+                else:
+                    input_data = torch.randint(0, 30000, (batch_size, sequence_length), device=device)
+                    for _ in range(config.warmup_runs):
+                        _ = model(input_data)
+                        if config.platform == "neuron":
+                            xm.wait_device_ops()
+                        else:
+                            torch.cuda.synchronize()
             # Benchmark runs
             throughputs = []
             latencies = []
             memory_usages = []
-
             with torch.no_grad():
-                for run in range(config.num_runs):
-                    # Memory baseline
-                    if config.platform == "neuron":
-                        memory_before = psutil.virtual_memory().used / (1024**3)
-                    else:
-                        torch.cuda.synchronize()
-                        memory_before = torch.cuda.memory_allocated(device) / (
-                            1024**3
-                        )
-
-                    # Timing
-                    start_time = time.time()
-
-                    outputs = model(input_data)
-
-                    if config.platform == "neuron":
-                        xm.wait_device_ops()
-                    else:
-                        torch.cuda.synchronize()
-
-                    end_time = time.time()
-
-                    # Memory measurement
-                    if config.platform == "neuron":
-                        memory_after = psutil.virtual_memory().used / (1024**3)
-                    else:
-                        memory_after = torch.cuda.max_memory_allocated(device) / (
-                            1024**3
-                        )
-                        torch.cuda.reset_peak_memory_stats(device)
-
-                    # Calculate metrics
-                    batch_time = end_time - start_time
-                    throughput = batch_size / batch_time
-                    latency = batch_time * 1000  # Convert to ms
-                    memory_usage = memory_after - memory_before
-
-                    throughputs.append(throughput)
-                    latencies.append(latency)
-                    memory_usages.append(max(0, memory_usage))  # Ensure non-negative
-
+                if config.prompts and tokenizer:
+                    for batch in batches:
+                        batch = batch.to(device)
+                        # Memory baseline
+                        if config.platform == "neuron":
+                            memory_before = psutil.virtual_memory().used / (1024**3)
+                        else:
+                            torch.cuda.synchronize()
+                            memory_before = torch.cuda.memory_allocated(device) / (1024**3)
+                        start_time = time.time()
+                        _ = model(input_ids=batch)
+                        if config.platform == "neuron":
+                            xm.wait_device_ops()
+                        else:
+                            torch.cuda.synchronize()
+                        end_time = time.time()
+                        if config.platform == "neuron":
+                            memory_after = psutil.virtual_memory().used / (1024**3)
+                        else:
+                            memory_after = torch.cuda.max_memory_allocated(device) / (1024**3)
+                            torch.cuda.reset_peak_memory_stats(device)
+                        batch_time = end_time - start_time
+                        throughput = batch.size(0) / batch_time
+                        latency = batch_time * 1000
+                        memory_usage = memory_after - memory_before
+                        throughputs.append(throughput)
+                        latencies.append(latency)
+                        memory_usages.append(max(0, memory_usage))
+                else:
+                    input_data = torch.randint(0, 30000, (batch_size, sequence_length), device=device)
+                    for run in range(config.num_runs):
+                        if config.platform == "neuron":
+                            memory_before = psutil.virtual_memory().used / (1024**3)
+                        else:
+                            torch.cuda.synchronize()
+                            memory_before = torch.cuda.memory_allocated(device) / (1024**3)
+                        start_time = time.time()
+                        outputs = model(input_data)
+                        if config.platform == "neuron":
+                            xm.wait_device_ops()
+                        else:
+                            torch.cuda.synchronize()
+                        end_time = time.time()
+                        if config.platform == "neuron":
+                            memory_after = psutil.virtual_memory().used / (1024**3)
+                        else:
+                            memory_after = torch.cuda.max_memory_allocated(device) / (1024**3)
+                            torch.cuda.reset_peak_memory_stats(device)
+                        batch_time = end_time - start_time
+                        throughput = batch_size / batch_time
+                        latency = batch_time * 1000
+                        memory_usage = memory_after - memory_before
+                        throughputs.append(throughput)
+                        latencies.append(latency)
+                        memory_usages.append(max(0, memory_usage))
             # Calculate statistics
-            avg_throughput = statistics.mean(throughputs)
-            avg_latency = statistics.mean(latencies)
-            avg_memory = statistics.mean(memory_usages)
-
-            throughput_std = (
-                statistics.stdev(throughputs) if len(throughputs) > 1 else 0.0
-            )
+            avg_throughput = statistics.mean(throughputs) if throughputs else 0.0
+            avg_latency = statistics.mean(latencies) if latencies else 0.0
+            avg_memory = statistics.mean(memory_usages) if memory_usages else 0.0
+            throughput_std = statistics.stdev(throughputs) if len(throughputs) > 1 else 0.0
             latency_std = statistics.stdev(latencies) if len(latencies) > 1 else 0.0
-
-            # Cost calculation
             cost_per_hour = self.pricing.get(config.instance_type, 0.0)
-            cost_per_sample = (
-                (cost_per_hour / 3600) / avg_throughput if avg_throughput > 0 else 0.0
-            )
-
+            cost_per_sample = ((cost_per_hour / 3600) / avg_throughput if avg_throughput > 0 else 0.0)
             return BenchmarkResult(
                 benchmark_id=f"{config.model_name}-inference-{batch_size}-{sequence_length}",
                 timestamp=datetime.now(),
@@ -243,7 +262,6 @@ class NeuronVsNvidiaBenchmarker:
                     }
                 ],
             )
-
         except Exception as e:
             logger.error(f"Inference benchmark failed: {e}")
             return BenchmarkResult(

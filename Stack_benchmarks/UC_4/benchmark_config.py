@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 @dataclass
 class BenchmarkConfig:
@@ -24,6 +24,7 @@ class BenchmarkConfig:
     # Data configuration
     synthetic_data: bool = True
     dataset_size: int = 1000
+    prompts: Optional[List[str]] = None  # List of prompts for prompt-based benchmarking
 
     def __post_init__(self):
         """Set default values."""
