@@ -138,14 +138,21 @@ class NeuronVsNvidiaBenchmarker:
         )
 
         try:
-            from transformers import AutoTokenizer
             tokenizer = None
+            batches = None
             if config.prompts:
                 if config.model_name == "zephyr":
+                    from transformers import AutoTokenizer
                     model_name = "HuggingFaceH4/zephyr-7b-beta"
+                    tokenizer = AutoTokenizer.from_pretrained(model_name)
+                elif config.model_name == "roberta-base":
+                    from transformers import RobertaTokenizer
+                    model_name = "roberta-base"
+                    tokenizer = RobertaTokenizer.from_pretrained(model_name)
                 else:
+                    from transformers import AutoTokenizer
                     model_name = config.model_name
-                tokenizer = AutoTokenizer.from_pretrained(model_name)
+                    tokenizer = AutoTokenizer.from_pretrained(model_name)
                 # Prepare batches of prompts/chunks
                 batches = self._batch_prompts(config.prompts, tokenizer, batch_size, chunk_size=sequence_length)
             # Prepare model and data
@@ -162,7 +169,11 @@ class NeuronVsNvidiaBenchmarker:
                     for _ in range(config.warmup_runs):
                         for batch in batches:
                             batch = batch.to(device)
-                            _ = model(input_ids=batch)
+                            if config.model_name == "roberta-base":
+                                attention_mask = (batch != tokenizer.pad_token_id).long()
+                                _ = model(input_ids=batch, attention_mask=attention_mask)
+                            else:
+                                _ = model(input_ids=batch)
                             if config.platform == "neuron":
                                 xm.wait_device_ops()
                             else:
@@ -190,7 +201,11 @@ class NeuronVsNvidiaBenchmarker:
                             torch.cuda.synchronize()
                             memory_before = torch.cuda.memory_allocated(device) / (1024**3)
                         start_time = time.time()
-                        _ = model(input_ids=batch)
+                        if config.model_name == "roberta-base":
+                            attention_mask = (batch != tokenizer.pad_token_id).long()
+                            _ = model(input_ids=batch, attention_mask=attention_mask)
+                        else:
+                            _ = model(input_ids=batch)
                         if config.platform == "neuron":
                             xm.wait_device_ops()
                         else:
