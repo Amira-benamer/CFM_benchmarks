@@ -26,5 +26,6 @@ resource "aws_instance" "ml_benchmark" {
   tags = {
     Name     = var.experiment_name
     Platform = var.name
+    Project  = "13939"
   }
 }
