@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Dict, Optional
-from .benchmark_config import BenchmarkConfig
+from benchmark_config import BenchmarkConfig
 
 @dataclass
 class BenchmarkResult:

@@ -12,9 +12,9 @@ import psutil
 import torch
 import torch.nn as nn
 
-from .benchmark_config import BenchmarkConfig
-from .benchmark_result import BenchmarkResult
-from .standard_model_suite import StandardModelSuite
+from benchmark_config import BenchmarkConfig
+from benchmark_result import BenchmarkResult
+from standard_model_suite import StandardModelSuite
 
 try:
     import torch_neuronx
