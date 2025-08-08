@@ -13,7 +13,7 @@ class BenchmarkResult:
     config: BenchmarkConfig
 
     # Performance metrics
-    throughput: float  # samples/second or tokens/second
+    throughput: float  # samples/second, tokens/second
     latency_ms: float  # milliseconds
     memory_usage_gb: float  # peak memory in GB
     compilation_time_s: Optional[float] = None  # seconds

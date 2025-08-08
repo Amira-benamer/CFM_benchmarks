@@ -9,8 +9,13 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 import psutil
-import torch
-import torch.nn as nn
+
+try:
+    import torch
+    import torch.nn as nn
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
 
 from benchmark_config import BenchmarkConfig
 from benchmark_result import BenchmarkResult
@@ -26,10 +31,10 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class NeuronVsNvidiaBenchmarker:
-    def __init__(self, results_dir: str = "./benchmark_results"):
+    def __init__(self, results_dir: str = "./benchmark_results", platform: str = None):
         self.results_dir = Path(results_dir)
         self.results_dir.mkdir(parents=True, exist_ok=True)
-        self.current_platform = self._detect_platform()
+        self.current_platform = platform if platform else self._detect_platform()
         self.pricing = {
             "inf2.xlarge": 0.37,
             "inf2.8xlarge": 2.97,
@@ -52,7 +57,7 @@ class NeuronVsNvidiaBenchmarker:
                     return "neuron"
             except Exception:
                 pass
-        if torch.cuda.is_available():
+        if TORCH_AVAILABLE and torch.cuda.is_available():
             return "nvidia"
         return "cpu"
 
@@ -95,8 +100,8 @@ class NeuronVsNvidiaBenchmarker:
 
     def _get_model(self, model_name: str) -> Optional[nn.Module]:
         model_registry = {
-            "roberta-base": lambda: self.models.get_roberta_base(),
-            "zephyr": lambda: self.models.get_zephyr_model(),
+            "roberta-base": lambda: self.models.get_roberta_base(platform=self.current_platform),
+            "zephyr": lambda: self.models.get_zephyr_model(platform=self.current_platform),
         }
         if model_name in model_registry:
             return model_registry[model_name]()
@@ -137,6 +142,18 @@ class NeuronVsNvidiaBenchmarker:
             f"🔍 Inference benchmark: batch={batch_size}, seq_len={sequence_length}"
         )
 
+        if not TORCH_AVAILABLE and config.platform != "neuron":
+            logger.error("PyTorch is not available on this system and is required for non-Neuron platforms.")
+            return BenchmarkResult(
+                benchmark_id=f"{config.model_name}-inference-{batch_size}-{sequence_length}",
+                timestamp=datetime.now(),
+                config=config,
+                throughput=0.0,
+                latency_ms=0.0,
+                memory_usage_gb=0.0,
+                error_message="PyTorch is not available on this system.",
+            )
+
         try:
             tokenizer = None
             batches = None
@@ -156,12 +173,26 @@ class NeuronVsNvidiaBenchmarker:
                 # Prepare batches of prompts/chunks
                 batches = self._batch_prompts(config.prompts, tokenizer, batch_size, chunk_size=sequence_length)
             # Prepare model and data
-            if config.platform == "neuron" and NEURON_AVAILABLE:
+            if self.current_platform == "neuron" and NEURON_AVAILABLE:
                 device = xm.xla_device()
                 model = model.to(device)
-            else:
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            elif self.current_platform == "nvidia" and TORCH_AVAILABLE and torch.cuda.is_available():
+                device = torch.device("cuda")
                 model = model.to(device)
+            elif TORCH_AVAILABLE:
+                device = torch.device("cpu")
+                model = model.to(device)
+            else:
+                logger.error("PyTorch is not available for this benchmark.")
+                return BenchmarkResult(
+                    benchmark_id=f"{config.model_name}-inference-{batch_size}-{sequence_length}",
+                    timestamp=datetime.now(),
+                    config=config,
+                    throughput=0.0,
+                    latency_ms=0.0,
+                    memory_usage_gb=0.0,
+                    error_message="PyTorch is not available on this system.",
+                )
             model.eval()
             # Warmup runs
             with torch.no_grad():
@@ -170,22 +201,23 @@ class NeuronVsNvidiaBenchmarker:
                         for batch in batches:
                             batch = batch.to(device)
                             if config.model_name == "roberta-base":
-                                attention_mask = (batch != tokenizer.pad_token_id).long()
+                                attention_mask = (batch != tokenizer.pad_token_id).long().to(device)
                                 _ = model(input_ids=batch, attention_mask=attention_mask)
                             else:
                                 _ = model(input_ids=batch)
-                            if config.platform == "neuron":
+                            if self.current_platform == "neuron":
                                 xm.wait_device_ops()
-                            else:
+                            elif TORCH_AVAILABLE and torch.cuda.is_available():
                                 torch.cuda.synchronize()
                 else:
-                    input_data = torch.randint(0, 30000, (batch_size, sequence_length), device=device)
+                    input_data = torch.randint(0, 30000, (batch_size, sequence_length)).to(device)
                     for _ in range(config.warmup_runs):
                         _ = model(input_data)
-                        if config.platform == "neuron":
+                        if self.current_platform == "neuron":
                             xm.wait_device_ops()
-                        else:
+                        elif TORCH_AVAILABLE and torch.cuda.is_available():
                             torch.cuda.synchronize()
+                        
             # Benchmark runs
             throughputs = []
             latencies = []
@@ -197,25 +229,29 @@ class NeuronVsNvidiaBenchmarker:
                         # Memory baseline
                         if config.platform == "neuron":
                             memory_before = psutil.virtual_memory().used / (1024**3)
-                        else:
+                        elif TORCH_AVAILABLE and torch.cuda.is_available():
                             torch.cuda.synchronize()
                             memory_before = torch.cuda.memory_allocated(device) / (1024**3)
+                        else:
+                            memory_before = 0.0
                         start_time = time.time()
                         if config.model_name == "roberta-base":
-                            attention_mask = (batch != tokenizer.pad_token_id).long()
+                            attention_mask = (batch != tokenizer.pad_token_id).long().to(device)
                             _ = model(input_ids=batch, attention_mask=attention_mask)
                         else:
                             _ = model(input_ids=batch)
-                        if config.platform == "neuron":
+                        if self.current_platform == "neuron":
                             xm.wait_device_ops()
-                        else:
+                        elif TORCH_AVAILABLE and torch.cuda.is_available():
                             torch.cuda.synchronize()
                         end_time = time.time()
                         if config.platform == "neuron":
                             memory_after = psutil.virtual_memory().used / (1024**3)
-                        else:
+                        elif TORCH_AVAILABLE and torch.cuda.is_available():
                             memory_after = torch.cuda.max_memory_allocated(device) / (1024**3)
                             torch.cuda.reset_peak_memory_stats(device)
+                        else:
+                            memory_after = 0.0
                         batch_time = end_time - start_time
                         throughput = batch.size(0) / batch_time
                         latency = batch_time * 1000
@@ -224,25 +260,29 @@ class NeuronVsNvidiaBenchmarker:
                         latencies.append(latency)
                         memory_usages.append(max(0, memory_usage))
                 else:
-                    input_data = torch.randint(0, 30000, (batch_size, sequence_length), device=device)
+                    input_data = torch.randint(0, 30000, (batch_size, sequence_length)).to(device)
                     for run in range(config.num_runs):
                         if config.platform == "neuron":
                             memory_before = psutil.virtual_memory().used / (1024**3)
-                        else:
+                        elif TORCH_AVAILABLE and torch.cuda.is_available():
                             torch.cuda.synchronize()
                             memory_before = torch.cuda.memory_allocated(device) / (1024**3)
+                        else:
+                            memory_before = 0.0
                         start_time = time.time()
                         outputs = model(input_data)
-                        if config.platform == "neuron":
+                        if self.current_platform == "neuron":
                             xm.wait_device_ops()
-                        else:
+                        elif TORCH_AVAILABLE and torch.cuda.is_available():
                             torch.cuda.synchronize()
                         end_time = time.time()
                         if config.platform == "neuron":
                             memory_after = psutil.virtual_memory().used / (1024**3)
-                        else:
+                        elif TORCH_AVAILABLE and torch.cuda.is_available():
                             memory_after = torch.cuda.max_memory_allocated(device) / (1024**3)
                             torch.cuda.reset_peak_memory_stats(device)
+                        else:
+                            memory_after = 0.0
                         batch_time = end_time - start_time
                         throughput = batch_size / batch_time
                         latency = batch_time * 1000

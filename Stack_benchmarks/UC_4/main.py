@@ -26,34 +26,88 @@ long_text = (
 )
 chunked_prompts = textwrap.wrap(long_text, 300)
 
-# 4. Example BenchmarkConfig for Zephyr
-config_zephyr = BenchmarkConfig(
-    model_name="zephyr",
-    framework="pytorch",
-    task_type="inference",
-    platform="neuron",
-    instance_type="inf2.xlarge",
-    batch_sizes=[1, 2, 4],
-    sequence_lengths=[400],  # chunk size in tokens
-    num_runs=3,
-    prompts=batch_prompts  # Try niveau_prompt or chunked_prompts as well
-)
+# Platform will be set dynamically below
+config_zephyr = None
+config_roberta = None
 
-# 5. Example BenchmarkConfig for RoBERTa
-config_roberta = BenchmarkConfig(
-    model_name="roberta-base",
-    framework="pytorch",
-    task_type="inference",
-    platform="neuron",
-    instance_type="inf2.xlarge",
-    batch_sizes=[1, 2, 4],
-    sequence_lengths=[400],  # chunk size in tokens
-    num_runs=3,
-    prompts=batch_prompts  # Try niveau_prompt or chunked_prompts as well
-)
+import torch
+
+def compile_models_to_inferentia(platform):
+    import torch_neuronx
+    from standard_model_suite import StandardModelSuite
+    models = StandardModelSuite()
+    # Compile Zephyr
+    zephyr_model = models.get_zephyr_model(platform=platform)
+    zephyr_model.eval()
+    example_input_zephyr = torch.randint(0, 32000, (4, 400))  # batch=8, seq_len=400
+    print("Compiling Zephyr to Inferentia...")
+    zephyr_neuron = torch_neuronx.trace(
+        zephyr_model,
+        example_input_zephyr,
+        compiler_args=["--model-type=transformer", "--auto-cast=all", "--enable-fast-loading-neuron", "--batching=8", "--optimize-for-inference", "--enable-mixed-precision", "--neuroncore-pipeline-cores=1"],
+        compiler_timeout=300,
+    )
+    torch.save(zephyr_neuron, "zephyr_neuron.pt")
+    print("Zephyr compiled and saved as zephyr_neuron.pt")
+    # Compile RoBERTa
+    roberta_model = models.get_roberta_base(platform=platform)
+    roberta_model.eval()
+    example_input_roberta = torch.randint(0, 32000, (4, 400))  # batch=8, seq_len=400
+    print("Compiling RoBERTa to Inferentia...")
+    roberta_neuron = torch_neuronx.trace(
+        roberta_model,
+        example_input_roberta,
+        compiler_args=["--model-type=transformer", "--auto-cast=all", "--enable-fast-loading-neuron", "--batching=8", "--optimize-for-inference", "--enable-mixed-precision", "--neuroncore-pipeline-cores=1"],
+        compiler_timeout=300,
+    )
+    torch.save(roberta_neuron, "roberta_neuron.pt")
+    print("RoBERTa compiled and saved as roberta_neuron.pt")
+
+
+def detect_platform():
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "nvidia"
+    except ImportError:
+        pass
+    try:
+        import torch_xla.core.xla_model as xm
+        devices = xm.get_xla_supported_devices()
+        if any("NEURON" in str(device) for device in devices):
+            return "neuron"
+    except ImportError:
+        pass
+    return "neuron"  # Default to neuron if no CUDA and torch_xla is present
 
 if __name__ == "__main__":
-    benchmarker = NeuronVsNvidiaBenchmarker()
+    platform = detect_platform()
+    # Set configs with correct platform
+    config_zephyr = BenchmarkConfig(
+        model_name="zephyr",
+        framework="pytorch",
+        task_type="inference",
+        platform=platform,
+        instance_type="inf2.8xlarge" if platform == "neuron" else "g5.2xlarge",
+        batch_sizes=[1, 2, 4],
+        sequence_lengths=[400],  # chunk size in tokens
+        num_runs=3,
+        prompts=batch_prompts  # Try niveau_prompt or chunked_prompts as well
+    )
+    config_roberta = BenchmarkConfig(
+        model_name="roberta-base",
+        framework="pytorch",
+        task_type="inference",
+        platform=platform,
+        instance_type="inf2.8xlarge" if platform == "neuron" else "g5.2xlarge",
+        batch_sizes=[ 1, 2, 4],
+        sequence_lengths=[400],  # chunk size in tokens
+        num_runs=3,
+        prompts=batch_prompts  # Try niveau_prompt or chunked_prompts as well
+    )
+    if platform == "neuron":
+        compile_models_to_inferentia(platform)
+    benchmarker = NeuronVsNvidiaBenchmarker(platform=platform)
     print("\n--- Zephyr Benchmark ---")
     results_zephyr = benchmarker.run_comprehensive_benchmark(config_zephyr)
     for result in results_zephyr:
